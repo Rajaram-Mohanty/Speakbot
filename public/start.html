@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChatBot Prompt</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="start.css">
+</head>
+
+<body>
+
+    <nav>
+        <a href="index.html" class="btn">Home</a>
+    </nav>
+
+    <div id="chatHistory" class="chat-history"></div>
+
+
+    <div class="chat-container">
+        <div class="chat-input">
+            <textarea id="userPrompt" placeholder="Type your prompt..."></textarea>
+            <button id="sendBtn">Send</button>
+        </div>
+    </div>
+
+
+    <script>
+
+        document.addEventListener("DOMContentLoaded", function () {
+            const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+            const synth = window.speechSynthesis;
+            const chatHistory = document.getElementById("chatHistory");
+            const sendBtn = document.getElementById("sendBtn");
+            const inputField = document.getElementById("userPrompt");
+
+            recognition.lang = "en-US";
+            recognition.continuous = false;
+            recognition.onresult = async function (event) {
+                const userPrompt = event.results[0][0].transcript.trim();
+                console.log("User said:", userPrompt);
+                displayMessage(userPrompt, "user");
+                sendToBackend(userPrompt);
+            };
+
+            recognition.onerror = (event) => console.error("Speech Recognition Error:", event);
+
+
+
+            function displayMessage(text, sender) {
+                const messageDiv = document.createElement("p");
+                messageDiv.classList.add(sender === "user" ? "user-message" : "bot-message");
+                messageDiv.textContent = `${sender === "user" ? "You" : "Bot"}: ${text}`;
+                chatHistory.appendChild(messageDiv);
+                chatHistory.scrollTop = chatHistory.scrollHeight;
+            }
+
+            async function sendToBackend(prompt) {
+                try {
+                    console.log("Sending prompt to backend:", prompt);
+
+                    const response = await fetch("http://localhost:5000/api/chat", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ message: prompt })
+                    });
+
+                    if (!response.ok) {
+                        console.error("Backend error:", response.statusText);
+                        displayMessage("Error: Could not get a response", "bot");
+                        return;
+                    }
+
+                    const data = await response.json();
+                    console.log("Response from backend:", data);
+
+                    if (data.response) {
+                        displayMessage(data.response, "bot");
+                        speakResponse(data.response);
+                    } else {
+                        displayMessage("Error: No valid response received", "bot");
+                        speakResponse("No valid response from the model.");
+                    }
+                } catch (error) {
+                    console.error("Error sending prompt to backend:", error);
+                    displayMessage("Error connecting to backend", "bot");
+                    speakResponse("Error connecting to the backend.");
+                }
+            }
+
+
+
+            function speakResponse(text) {
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = "en-US";
+                utterance.rate = 1;
+                synth.speak(utterance);
+            }
+
+            sendBtn.addEventListener("click", () => {
+                const text = inputField.value.trim();
+                if (text) {
+                    displayMessage(text, "user");
+                    sendToBackend(text);
+                    inputField.value = "";
+                }
+            });
+
+            inputField.addEventListener("keypress", (event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    sendBtn.click();
+                }
+            });
+
+
+            // Wake word detection for "Hey Buddy"
+            let wakeWordActive = false;
+
+            function detectWakeWord() {
+                const wakeRecognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+                wakeRecognition.lang = "en-US";
+                wakeRecognition.continuous = true;
+
+                wakeRecognition.onresult = (event) => {
+                    const transcript = event.results[event.results.length - 1][0].transcript.trim().toLowerCase();
+                    console.log("Detected speech:", transcript);
+
+                    if (transcript.includes("hey buddy") && !wakeWordActive) {
+                        console.log("Wake word detected! Activating listening...");
+                        wakeWordActive = true; // To prevent multiple activations
+                        wakeRecognition.stop();  // Stop wake word detection
+                        speakResponse("Yes boss, how can I help you?", () => {
+                            setTimeout(() => {
+                                startListening();
+                            }, 800); // Start listening after a brief delay
+                        });
+                    }
+                };
+
+                wakeRecognition.onerror = (event) => {
+                    if (event.error !== "aborted") {
+                        console.error("Wake word recognition error:", event.error);
+                    }
+                };
+
+                wakeRecognition.onend = () => {
+                    if (!wakeWordActive) {
+                        console.log("Wake word detection stopped. Restarting...");
+                        setTimeout(() => wakeRecognition.start(), 500);  // Restart detection
+                    }
+                };
+
+                console.log("Wake word detection started...");
+                wakeRecognition.start();
+            }
+
+
+
+            // Modify startListening() to restart wake word detection after user input
+            function startListening() {
+                console.log("Listening for user input...");
+                const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+                recognition.lang = "en-US";
+                recognition.continuous = false;
+
+                recognition.onresult = async (event) => {
+                    const userMessage = event.results[0][0].transcript.trim();
+                    console.log("User actual message:", userMessage);
+
+                    // Avoid sending the wake word to the backend
+                    if (userMessage.toLowerCase().includes("hey buddy")) {
+                        console.log("Wake word detected in user message. Ignoring it.");
+                        wakeWordActive = false;
+                        detectWakeWord();  // Resume wake word detection
+                        return;
+                    }
+
+                    displayMessage(userMessage, "user");
+                    await sendToBackend(userMessage);  // Send actual message to the backend
+                };
+
+                recognition.onerror = (event) => {
+                    if (event.error !== "aborted") {
+                        console.error("Speech Recognition Error:", event.error);
+                    }
+                };
+
+                recognition.onend = () => {
+                    console.log("User input recognition ended. Returning to wake word detection...");
+                    wakeWordActive = false; // Re-enable wake word detection
+                    detectWakeWord();
+                };
+
+                try {
+                    recognition.start();
+                } catch (error) {
+                    console.error("Error starting speech recognition:", error);
+                }
+            }
+
+
+
+
+            // Function to make the bot speak before listening
+            function speakResponse(text, callback) {
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = "en-US";
+                utterance.rate = 1;
+                utterance.onend = callback; // Start listening after speech
+                window.speechSynthesis.speak(utterance);
+            }
+
+            detectWakeWord();
+        });
+    </script>
+
+</body>
+
+</html>

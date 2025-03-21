@@ -1,0 +1,116 @@
+
+
+body {
+    background: linear-gradient(to right, #F0F2F0, #5A7690, #1A2A60);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 1.5rem;
+    color: black;
+}
+
+nav {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background-color: rgba(255, 255, 255, 0.2);
+    padding: 1rem;
+    box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
+    border-radius: 0.75rem;
+    margin-bottom: 1.5rem;
+}
+
+.btn {
+    background-color: rgb(0, 107, 143);
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    transition: background-color 0.3s;
+}
+
+.btn:hover {
+    background-color: #000C40;
+}
+
+.hero {
+    text-align: center;
+    max-width: 40rem;
+}
+
+.hero h2 {
+    font-size: 2.5rem;
+    font-weight: bold;
+    margin-bottom: 1rem;
+}
+
+.hero p {
+    font-size: 1.125rem;
+    margin-bottom: 1.5rem;
+}
+
+/* Initially hidden overlay */
+#overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.4); /* Dark transparent background */
+    backdrop-filter: blur(5px); /* Blur effect */
+    display: none; /* Hidden by default */
+    z-index: 5; /* Ensure it's behind the login box */
+}
+
+/* Ensure login section appears above overlay */
+.login-section {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 10; /* Above overlay */
+    display: none;
+    width: 100%;
+    max-width: 25rem;
+    padding: 1.5rem;
+    background-color: rgba(255, 255, 255, 0.9);
+    box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
+    border-radius: 0.75rem;
+}
+
+.login-section h3 {
+    text-align: center;  /* Centers the text */
+    font-weight: bold;   /* Makes it bold */
+    font-size: 1.5rem;   /* Adjusts the size (optional) */
+    margin-bottom: 1rem; /* Adds spacing below */
+    color: #111827;      /* Ensures good contrast */
+}
+
+.login-section input {
+    width: 100%;
+    padding: 0.5rem;
+    margin-bottom: 1rem;
+    border: 1px solid #d1d5db;
+    border-radius: 0.5rem;
+    background-color: white;
+    color: #111827;
+}
+
+/* Blur Effect */
+.blur {
+    filter: blur(5px); /* Adds blur effect */
+    transition: 0.3s ease-in-out; /* Smooth effect */
+}
+
+
+.about {
+    margin-top: 4rem;
+    max-width: 40rem;
+    text-align: center;
+}
+
+.about h3 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+}
