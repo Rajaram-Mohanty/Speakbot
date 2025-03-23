@@ -14,8 +14,8 @@ app.post("/api/chat", (req, res) => {
     console.log("Received user message:", userMessage);
 
     try {
-        console.log("Running command: ollama run deepseek-r1:8b", userMessage);
-        const output = execSync(`ollama run deepseek-r1:8b "${userMessage}"`, { encoding: "utf-8" });
+        console.log("Running command: ollama run mistral", userMessage);
+        const output = execSync(`ollama run mistral "${userMessage}"`, { encoding: "utf-8" });
         console.log("Model Output:", output);
         res.json({ response: output.trim() });
     } catch (error) {

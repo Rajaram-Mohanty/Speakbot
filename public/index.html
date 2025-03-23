@@ -82,27 +82,27 @@
     const transcript = event.results[event.results.length - 1][0].transcript.trim().toLowerCase();
     console.log("Heard:", transcript);
 
-    if (transcript === "hey buddy") {
+    if (transcript === "get started") {
         console.log("Wake word detected! Redirecting...");
         window.location.href = "start.html"; // Redirects to start.html
-
-        // Send the prompt to the backend
-        fetch("http://localhost:5000/api/chat", {  // Port 5000 for backend server
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ message: transcript })
-        })
-        .then(response => response.json())
-        .then(data => {
-            console.log("Response from backend:", data.response);
-            // You can display the response on the UI here if needed
-        })
-        .catch(error => {
-            console.error("Error fetching response:", error);
-        });
+        return; // Do not send the wake word to the backend
     }
-};
 
+    // Send the prompt to the backend (if it's not the wake word)
+    fetch("http://localhost:5000/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: transcript })
+    })
+    .then(response => response.json())
+    .then(data => {
+        console.log("Response from backend:", data.response);
+        // You can display the response on the UI here if needed
+    })
+    .catch(error => {
+        console.error("Error fetching response:", error);
+    });
+};
 
         recognition.onerror = (event) => console.error("Speech Recognition Error:", event);
         recognition.start(); // Start listening continuously
