@@ -44,6 +44,8 @@
 
             let isVoiceResponseEnabled = true;
             let isWakeWordDetected = false;
+            let isRecognitionActive = false;
+            let hasSpokenAfterWakeWord = false;
             let listeningTimeout = null;
 
             micToggle.addEventListener("change", () => {
@@ -56,24 +58,22 @@
             recognition.continuous = false;
             recognition.interimResults = false;
 
-            let hasSpokenAfterWakeWord = false;
-
-            // Inside recognition.onresult
             recognition.onresult = async function (event) {
                 clearTimeout(listeningTimeout);
                 recognition.stop();
+                isRecognitionActive = false;
 
                 const userPrompt = event.results[0][0].transcript.trim().toLowerCase();
                 console.log("User said:", userPrompt);
 
-                if (userPrompt.includes("hey buddy") && !isWakeWordDetected) {
+                if (!isWakeWordDetected && userPrompt.includes("hey buddy")) {
                     console.log("Wake word detected! Activating listening...");
                     isWakeWordDetected = true;
                     hasSpokenAfterWakeWord = false;
 
                     if (isVoiceResponseEnabled) {
                         speakResponse("Yes boss, how can I help you?", () => {
-                            startListening(); // Listen after response
+                            startListening();
                         });
                     } else {
                         startListening();
@@ -81,20 +81,30 @@
                     return;
                 }
 
+                // If no wake word detected, ignore this input
+                if (!isWakeWordDetected) {
+                    console.log("Ignored input — wake word not detected.");
+                    return;
+                }
+
                 hasSpokenAfterWakeWord = true;
                 displayMessage(userPrompt, "user");
                 await sendToBackend(userPrompt);
             };
+
             recognition.onerror = (event) => {
                 console.error("Speech Recognition Error:", event.error);
-                if (event.error === "aborted" || event.error === "network" || event.error === "not-allowed") {
-                    console.log("Restarting wake word detection due to error...");
+                isRecognitionActive = false;
+
+                if (["aborted", "network", "not-allowed"].includes(event.error)) {
                     startWakeWordDetection();
                 }
             };
 
             recognition.onend = () => {
                 console.log("Speech recognition ended.");
+                isRecognitionActive = false;
+
                 if (!isWakeWordDetected) {
                     startWakeWordDetection();
                 }
@@ -151,7 +161,6 @@
                     if (isVoiceResponseEnabled) {
                         speakResponse("Error connecting to the backend.");
                     }
-
                     if (loadingDiv.parentNode) {
                         chatHistory.removeChild(loadingDiv);
                     }
@@ -176,32 +185,44 @@
             }
 
             function startListening() {
-                console.log("Listening for user input...");
-                recognition.start();
+                if (isRecognitionActive) return;
 
-                // Set a fallback timeout — if user doesn't speak in 5s, reset wake word
+                console.log("Listening for user input...");
+                isRecognitionActive = true;
+
+                try {
+                    recognition.start();
+                } catch (e) {
+                    console.warn("Recognition already active or failed to start:", e);
+                    isRecognitionActive = false;
+                }
+
                 listeningTimeout = setTimeout(() => {
                     try {
                         recognition.stop();
                     } catch (e) {
-                        console.warn("Recognition already stopped");
+                        console.warn("Recognition already stopped.");
                     }
 
-                    // If no user input after wake word
                     if (isWakeWordDetected && !hasSpokenAfterWakeWord) {
-                        console.log("No input after wake word. Restarting wake word detection...");
+                        console.log("No input after wake word. Restarting detection...");
                         isWakeWordDetected = false;
                         startWakeWordDetection();
                     }
-                }, 5000); // Adjust time if needed
+                }, 5000);
             }
 
             function startWakeWordDetection() {
+                if (isRecognitionActive) return;
+
                 console.log("Starting wake word detection...");
+                isRecognitionActive = true;
+
                 try {
                     recognition.start();
                 } catch (err) {
                     console.error("Failed to start recognition:", err);
+                    isRecognitionActive = false;
                 }
             }
 
@@ -221,8 +242,10 @@
                 }
             });
 
+            // Start the initial wake word detection
             startWakeWordDetection();
         });
+
     </script>
 
 </body>
