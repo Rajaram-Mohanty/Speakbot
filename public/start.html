@@ -42,60 +42,61 @@
             const micToggle = document.getElementById("micToggle");
             const inputField = document.getElementById("userPrompt");
 
-            let isVoiceResponseEnabled = true; // Tracks if voice response is enabled
-            let isWakeWordDetected = false; // Tracks if the wake word has been detected
+            let isVoiceResponseEnabled = true;
+            let isWakeWordDetected = false;
+            let listeningTimeout = null;
 
-            // Toggle mic state
             micToggle.addEventListener("change", () => {
                 isVoiceResponseEnabled = micToggle.checked;
                 console.log(`Voice response is now ${isVoiceResponseEnabled ? "ON" : "OFF"}`);
-
-                // If mic is turned off, stop any ongoing speech
-                if (!isVoiceResponseEnabled) {
-                    synth.cancel(); // Stop current speech
-                }
+                if (!isVoiceResponseEnabled) synth.cancel();
             });
 
             recognition.lang = "en-US";
-            recognition.continuous = false; // Listen for single utterances
-            recognition.interimResults = false; // Only final results
+            recognition.continuous = false;
+            recognition.interimResults = false;
 
+            let hasSpokenAfterWakeWord = false;
+
+            // Inside recognition.onresult
             recognition.onresult = async function (event) {
+                clearTimeout(listeningTimeout);
+                recognition.stop();
+
                 const userPrompt = event.results[0][0].transcript.trim().toLowerCase();
                 console.log("User said:", userPrompt);
 
-                // Check if the user prompt is the wake word
                 if (userPrompt.includes("hey buddy") && !isWakeWordDetected) {
                     console.log("Wake word detected! Activating listening...");
-                    isWakeWordDetected = true; // Set the flag to true
+                    isWakeWordDetected = true;
+                    hasSpokenAfterWakeWord = false;
+
                     if (isVoiceResponseEnabled) {
                         speakResponse("Yes boss, how can I help you?", () => {
-                            startListening(); // Start listening for user prompt after the response
+                            startListening(); // Listen after response
                         });
                     } else {
-                        startListening(); // Start listening without voice response
+                        startListening();
                     }
-                    return; // Do not send the wake word to the backend
+                    return;
                 }
 
-                // If it's not the wake word, proceed as usual
+                hasSpokenAfterWakeWord = true;
                 displayMessage(userPrompt, "user");
-                sendToBackend(userPrompt); // Send the user's prompt to the backend
+                await sendToBackend(userPrompt);
             };
-
             recognition.onerror = (event) => {
                 console.error("Speech Recognition Error:", event.error);
-                if (event.error === "aborted") {
-                    console.log("Speech recognition aborted. Restarting...");
-                    setTimeout(() => startListening(), 500); // Restart after a short delay
+                if (event.error === "aborted" || event.error === "network" || event.error === "not-allowed") {
+                    console.log("Restarting wake word detection due to error...");
+                    startWakeWordDetection();
                 }
             };
 
             recognition.onend = () => {
                 console.log("Speech recognition ended.");
                 if (!isWakeWordDetected) {
-                    // Restart wake word detection if no wake word was detected
-                    setTimeout(() => startWakeWordDetection(), 500);
+                    startWakeWordDetection();
                 }
             };
 
@@ -108,46 +109,35 @@
             }
 
             async function sendToBackend(prompt) {
-                // Check if the prompt is a wake word
-                if (prompt.toLowerCase().includes("hey buddy") || prompt.toLowerCase().includes("get started")) {
-                    console.log("Wake word detected. Ignoring prompt.");
-                    return; // Do not send wake words to the backend
-                }
+                if (prompt.includes("hey buddy") || prompt.includes("get started")) return;
+
+                const loadingDiv = document.createElement("div");
+                loadingDiv.classList.add("loading-container");
+                const spinner = document.createElement("div");
+                spinner.classList.add("spinner");
+                loadingDiv.appendChild(spinner);
+                chatHistory.appendChild(loadingDiv);
+                chatHistory.scrollTop = chatHistory.scrollHeight;
 
                 try {
-                    console.log("Sending prompt to backend:", prompt);
-
-                    // Add a loading spinner
-                    const loadingDiv = document.createElement("div");
-                    loadingDiv.classList.add("loading-container");
-                    const spinner = document.createElement("div");
-                    spinner.classList.add("spinner");
-                    loadingDiv.appendChild(spinner);
-                    chatHistory.appendChild(loadingDiv);
-                    chatHistory.scrollTop = chatHistory.scrollHeight;
-
                     const response = await fetch("http://localhost:5000/api/chat", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ message: prompt })
                     });
 
+                    chatHistory.removeChild(loadingDiv);
+
                     if (!response.ok) {
-                        console.error("Backend error:", response.statusText);
                         displayMessage("Error: Could not get a response", "bot");
                         return;
                     }
 
                     const data = await response.json();
-                    console.log("Response from backend:", data);
-
-                    // Remove the loading spinner
-                    chatHistory.removeChild(loadingDiv);
-
                     if (data.response) {
                         displayMessage(data.response, "bot");
                         if (isVoiceResponseEnabled) {
-                            speakResponse(data.response); // Speak only if voice response is enabled
+                            speakResponse(data.response);
                         }
                     } else {
                         displayMessage("Error: No valid response received", "bot");
@@ -155,52 +145,64 @@
                             speakResponse("No valid response from the model.");
                         }
                     }
-                } catch (error) {
-                    console.error("Error sending prompt to backend:", error);
+                } catch (err) {
+                    console.error("Backend error:", err);
                     displayMessage("Error connecting to backend", "bot");
                     if (isVoiceResponseEnabled) {
                         speakResponse("Error connecting to the backend.");
                     }
 
-                    // Remove the loading spinner in case of error
-                    if (loadingDiv && loadingDiv.parentNode) {
+                    if (loadingDiv.parentNode) {
                         chatHistory.removeChild(loadingDiv);
                     }
                 } finally {
-                    // Restart wake word detection after processing the user prompt
-                    isWakeWordDetected = false; // Reset the wake word flag
-                    startWakeWordDetection(); // Restart wake word detection
+                    isWakeWordDetected = false;
+                    startWakeWordDetection();
                 }
             }
 
             function speakResponse(text, callback) {
-                if (!isVoiceResponseEnabled) return; // Do not speak if voice response is disabled
+                if (!isVoiceResponseEnabled) return;
                 const utterance = new SpeechSynthesisUtterance(text);
                 utterance.lang = "en-US";
                 utterance.rate = 1;
 
-                utterance.onstart = () => {
-                    console.log("Speech started");
-                };
-
                 utterance.onend = () => {
                     console.log("Speech ended");
-                    if (callback) callback(); // Call the callback after speech ends
+                    if (callback) callback();
                 };
 
                 synth.speak(utterance);
             }
 
-            // Function to start listening for user input
             function startListening() {
-                console.log("Starting to listen for user input...");
-                recognition.start(); // Start speech recognition
+                console.log("Listening for user input...");
+                recognition.start();
+
+                // Set a fallback timeout — if user doesn't speak in 5s, reset wake word
+                listeningTimeout = setTimeout(() => {
+                    try {
+                        recognition.stop();
+                    } catch (e) {
+                        console.warn("Recognition already stopped");
+                    }
+
+                    // If no user input after wake word
+                    if (isWakeWordDetected && !hasSpokenAfterWakeWord) {
+                        console.log("No input after wake word. Restarting wake word detection...");
+                        isWakeWordDetected = false;
+                        startWakeWordDetection();
+                    }
+                }, 5000); // Adjust time if needed
             }
 
-            // Function to start wake word detection
             function startWakeWordDetection() {
                 console.log("Starting wake word detection...");
-                recognition.start(); // Start listening for the wake word
+                try {
+                    recognition.start();
+                } catch (err) {
+                    console.error("Failed to start recognition:", err);
+                }
             }
 
             sendBtn.addEventListener("click", () => {
@@ -219,7 +221,6 @@
                 }
             });
 
-            // Start wake word detection as soon as the page loads
             startWakeWordDetection();
         });
     </script>
